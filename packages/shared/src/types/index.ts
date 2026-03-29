@@ -37,3 +37,10 @@ export type {
   SubstitutionOption,
   PriceAlert,
 } from "./smart";
+export type {
+  ShoppingRoute,
+  ShoppingStop,
+  ShoppingStopItem,
+  RouteOptions,
+  NearbyStore,
+} from "./route";
