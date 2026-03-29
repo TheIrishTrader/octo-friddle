@@ -26,9 +26,9 @@ export default function RouteScreen() {
   const options = useMemo<Partial<RouteOptions>>(
     () => ({
       maxStops,
-      gasPricePerGallon: parseFloat(gasPrice) || 3.5,
+      gasPricePerGallon: includeTravelCosts ? (parseFloat(gasPrice) || 3.5) : 0,
     }),
-    [maxStops, gasPrice],
+    [maxStops, gasPrice, includeTravelCosts],
   );
 
   const routeQuery = useOptimalRoute(
@@ -108,7 +108,10 @@ export default function RouteScreen() {
               styles.toggle,
               includeTravelCosts && styles.toggleActive,
             ]}
-            onPress={() => setIncludeTravelCosts(!includeTravelCosts)}
+            onPress={() => {
+              setIncludeTravelCosts(!includeTravelCosts);
+              setShouldCalculate(false);
+            }}
           >
             <View
               style={[
