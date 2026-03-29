@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "GrocerySaver",
+    "slug": "grocery-saver",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "grocerysaver",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#10B981"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.family.grocerysaver",
+      "infoPlist": {
+        "NSCameraUsageDescription": "GrocerySaver needs camera access to scan barcodes, take photos of items, and scan receipts."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#10B981"
+      },
+      "package": "com.family.grocerysaver",
+      "permissions": ["CAMERA"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-camera"
+    ]
+  }
+}

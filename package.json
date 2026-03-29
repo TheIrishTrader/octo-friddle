@@ -1,0 +1,26 @@
+{
+  "name": "grocery-price-app",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Family grocery price comparison app with AI-powered scanning",
+  "scripts": {
+    "dev:api": "pnpm --filter @grocery/api dev",
+    "build:api": "pnpm --filter @grocery/api build",
+    "build:shared": "pnpm --filter @grocery/shared build",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/parser": "^8.57.2",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "typescript-eslint": "^8.57.2"
+  }
+}
