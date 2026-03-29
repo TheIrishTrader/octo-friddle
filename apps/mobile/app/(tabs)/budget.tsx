@@ -7,8 +7,10 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from "react-native";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useBudget } from "@/hooks/useBudget";
+import { useList } from "@/hooks/useList";
+import { useSubstitutions } from "@/hooks/useSmart";
 import { CATEGORY_LABELS, type GroceryCategory } from "@grocery/shared";
 
 function getCurrentMonth(): string {
@@ -27,7 +29,17 @@ function formatMonth(month: string): string {
 export default function BudgetScreen() {
   const month = getCurrentMonth();
   const { budget, isLoading, createBudget, isCreating } = useBudget(month);
+  const { activeList } = useList();
+  const { data: substitutions } = useSubstitutions(activeList?.id ?? null);
   const [budgetInput, setBudgetInput] = useState("");
+
+  const totalPotentialSavings = useMemo(() => {
+    if (!substitutions || substitutions.length === 0) return 0;
+    return substitutions.reduce((total, sub) => {
+      const bestOption = sub.suggestions[0];
+      return total + (bestOption ? bestOption.savings : 0);
+    }, 0);
+  }, [substitutions]);
 
   const handleSetBudget = () => {
     const amount = parseFloat(budgetInput);
@@ -138,6 +150,25 @@ export default function BudgetScreen() {
           </View>
         )}
       </View>
+
+      {/* Smart Savings */}
+      {totalPotentialSavings > 0 && (
+        <View style={styles.smartSavingsCard}>
+          <Text style={styles.smartSavingsTitle}>Smart Savings</Text>
+          <Text style={styles.smartSavingsAmount}>
+            ${totalPotentialSavings.toFixed(2)}
+          </Text>
+          <Text style={styles.smartSavingsHint}>
+            If you switch to suggested alternatives, you could save $
+            {totalPotentialSavings.toFixed(2)}/month
+          </Text>
+          <Text style={styles.smartSavingsCount}>
+            {substitutions?.length ?? 0} item
+            {(substitutions?.length ?? 0) === 1 ? "" : "s"} with cheaper
+            alternatives
+          </Text>
+        </View>
+      )}
 
       {/* Category breakdown */}
       <View style={styles.section}>
@@ -332,4 +363,39 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   categoryBarFill: { height: "100%", borderRadius: 2 },
+
+  // Smart Savings
+  smartSavingsCard: {
+    backgroundColor: "#ecfdf5",
+    borderRadius: 12,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
+    alignItems: "center",
+  },
+  smartSavingsTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#065f46",
+    marginBottom: 6,
+  },
+  smartSavingsAmount: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#059669",
+    marginBottom: 6,
+  },
+  smartSavingsHint: {
+    fontSize: 13,
+    color: "#065f46",
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  smartSavingsCount: {
+    fontSize: 11,
+    color: "#6ee7b7",
+    marginTop: 8,
+    fontWeight: "600",
+  },
 });

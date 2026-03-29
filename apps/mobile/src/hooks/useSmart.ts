@@ -7,21 +7,6 @@ import type {
   PriceAlert,
 } from "@grocery/shared";
 
-export interface Deal {
-  id: string;
-  itemId: string;
-  itemName: string;
-  storeName: string;
-  storeId: string;
-  originalPrice: number;
-  dealPrice: number;
-  savings: number;
-  savingsPercent: number;
-  expiresAt: string | null;
-  dealType: "bogo" | "percentage_off" | "fixed_price" | "clearance";
-  description: string;
-}
-
 export function useSuggestions() {
   return useQuery({
     queryKey: ["smart", "suggestions"],
