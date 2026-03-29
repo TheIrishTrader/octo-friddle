@@ -1,0 +1,6 @@
+apps/mobile
+apps/web
+.git
+.github
+*.md
+.env*
