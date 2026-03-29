@@ -8,8 +8,8 @@ export default function PricesPage() {
   const [tab, setTab] = useState<"basket" | "deals" | "alerts" | "subs">("basket");
 
   const itemIds = (activeList?.items ?? [])
-    .filter((i) => i.itemId)
-    .map((i) => i.itemId!);
+    .filter((i: { id: string }) => i.id)
+    .map((i: { id: string }) => i.id);
 
   const { data: basket, isLoading: basketLoading } = useBasketComparison(itemIds);
   const { data: alerts } = useAlerts(activeList?.id ?? null);

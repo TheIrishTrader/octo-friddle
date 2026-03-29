@@ -1,51 +1,72 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/api/client";
-import type { BudgetSummary, SpendingTrend } from "@grocery/shared";
+import { useCallback, useSyncExternalStore } from "react";
 
-export function useBudget(month: string) {
-  const queryClient = useQueryClient();
+interface BudgetData {
+  month: string;
+  budgetAmount: number;
+  totalSpent: number;
+  categoryBreakdown: { category: string; spent: number }[];
+}
 
-  const budgetQuery = useQuery({
-    queryKey: ["budget", month],
-    queryFn: () => apiClient.get<BudgetSummary>(`/budget/${month}`),
-  });
+interface SpendingTrend {
+  months: { month: string; totalSpent: number; budgetAmount?: number }[];
+}
 
-  const createBudgetMutation = useMutation({
-    mutationFn: (input: { month: string; budgetAmount: number }) =>
-      apiClient.post("/budget", input),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["budget", month] });
-    },
-  });
+const STORAGE_KEY = "grocery-budgets";
 
-  return {
-    budget: budgetQuery.data ?? null,
-    isLoading: budgetQuery.isLoading,
-    error: budgetQuery.error,
-    createBudget: (input: { month: string; budgetAmount: number }) =>
-      createBudgetMutation.mutate(input),
-    isCreating: createBudgetMutation.isPending,
+function getBudgets(): Record<string, BudgetData> {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch { /* ignore */ }
+  return {};
+}
+
+function saveBudgets(budgets: Record<string, BudgetData>) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(budgets));
+  window.dispatchEvent(new Event("grocery-budgets-changed"));
+}
+
+function subscribe(cb: () => void) {
+  window.addEventListener("grocery-budgets-changed", cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    window.removeEventListener("grocery-budgets-changed", cb);
+    window.removeEventListener("storage", cb);
   };
 }
 
-export function useSpendingTrends(months: number) {
-  return useQuery({
-    queryKey: ["budget", "trends", months],
-    queryFn: () =>
-      apiClient.get<SpendingTrend>(`/budget/trends?months=${months}`),
-  });
+function getSnapshot() {
+  return localStorage.getItem(STORAGE_KEY) ?? "";
 }
 
-export function useCreateBudget() {
-  const queryClient = useQueryClient();
+export function useBudget(month: string) {
+  const raw = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const budgets: Record<string, BudgetData> = raw ? JSON.parse(raw) : {};
+  const budget = budgets[month] ?? null;
 
-  return useMutation({
-    mutationFn: (input: { month: string; budgetAmount: number }) =>
-      apiClient.post("/budget", input),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ["budget", variables.month],
-      });
+  const createBudget = useCallback(
+    (input: { month: string; budgetAmount: number }) => {
+      const all = getBudgets();
+      all[input.month] = {
+        month: input.month,
+        budgetAmount: input.budgetAmount,
+        totalSpent: 0,
+        categoryBreakdown: [],
+      };
+      saveBudgets(all);
     },
-  });
+    [],
+  );
+
+  return {
+    budget,
+    isLoading: false,
+    error: null,
+    createBudget,
+    isCreating: false,
+  };
+}
+
+export function useSpendingTrends(_months: number) {
+  return { data: null as SpendingTrend | null, isLoading: false };
 }

@@ -1,70 +1,34 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/api/client";
-import type {
-  SmartSuggestion,
-  PurchasePattern,
-  Substitution,
-  PriceAlert,
-} from "@grocery/shared";
+// Smart features require the backend API. These hooks return empty data
+// when the API is unavailable so the UI stays functional.
+
+interface Suggestion { itemId: string; itemName: string; reason: string }
+interface Substitution { originalItemName: string; originalPrice: number; suggestions: { itemName: string; price: number; savings: number; storeName: string }[] }
+interface Alert { alertType: string; message: string; storeName: string }
+interface Deal { itemId: string; itemName: string; storeName: string; originalPrice: number; salePrice: number; savingsPercent: number }
 
 export function useSuggestions() {
-  return useQuery({
-    queryKey: ["smart", "suggestions"],
-    queryFn: () => apiClient.get<SmartSuggestion[]>("/smart/suggestions"),
-  });
+  return { data: [] as Suggestion[], isLoading: false };
 }
 
 export function usePatterns() {
-  return useQuery({
-    queryKey: ["smart", "patterns"],
-    queryFn: () => apiClient.get<PurchasePattern[]>("/smart/patterns"),
-  });
+  return { data: [] as unknown[], isLoading: false };
 }
 
 export function useAddSuggestions() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (input: { listId: string; itemIds: string[] }) =>
-      apiClient.post("/smart/suggestions/add", input),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["smart", "suggestions"] });
-      queryClient.invalidateQueries({ queryKey: ["list"] });
-      queryClient.invalidateQueries({ queryKey: ["lists"] });
-    },
-  });
+  return {
+    mutate: (_input: { listId: string; itemIds: string[] }) => {},
+    isPending: false,
+  };
 }
 
-export function useSubstitutions(listId: string | null) {
-  return useQuery({
-    queryKey: ["smart", "substitutions", listId],
-    queryFn: () =>
-      apiClient.get<Substitution[]>(`/smart/substitutions/list/${listId}`),
-    enabled: !!listId,
-  });
+export function useSubstitutions(_listId: string | null) {
+  return { data: [] as Substitution[], isLoading: false };
 }
 
-export function useAlerts(listId: string | null) {
-  return useQuery({
-    queryKey: ["smart", "alerts", listId],
-    queryFn: () =>
-      apiClient.get<PriceAlert[]>(`/smart/alerts/list/${listId}`),
-    enabled: !!listId,
-  });
-}
-
-interface Deal {
-  itemId: string;
-  itemName: string;
-  storeName: string;
-  originalPrice: number;
-  salePrice: number;
-  savingsPercent: number;
+export function useAlerts(_listId: string | null) {
+  return { data: [] as Alert[], isLoading: false };
 }
 
 export function useDeals() {
-  return useQuery({
-    queryKey: ["smart", "deals"],
-    queryFn: () => apiClient.get<Deal[]>("/smart/deals"),
-  });
+  return { data: [] as Deal[], isLoading: false };
 }

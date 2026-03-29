@@ -1,14 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useList } from "@/hooks/useList";
-import { useSuggestions, useAddSuggestions } from "@/hooks/useSmart";
 
 export default function ListPage() {
   const { activeList, isLoading, addItem, toggleItem, removeItem } = useList();
-  const { data: suggestions } = useSuggestions();
-  const addSuggestions = useAddSuggestions();
   const [newItem, setNewItem] = useState("");
-  const [showSuggestions, setShowSuggestions] = useState(true);
 
   const handleAddItem = () => {
     const trimmed = newItem.trim();
@@ -21,15 +17,9 @@ export default function ListPage() {
     if (e.key === "Enter") handleAddItem();
   };
 
-  const handleAddSuggestion = (itemId: string) => {
-    if (!activeList?.id) return;
-    addSuggestions.mutate({ listId: activeList.id, itemIds: [itemId] });
-  };
-
   const items = activeList?.items ?? [];
   const unchecked = items.filter((i) => !i.isChecked);
   const checked = items.filter((i) => i.isChecked);
-  const displayedSuggestions = (suggestions ?? []).slice(0, 3);
 
   if (isLoading) {
     return (
@@ -78,35 +68,6 @@ export default function ListPage() {
         </Link>
       </div>
 
-      {displayedSuggestions.length > 0 && (
-        <div className="suggestions-banner">
-          <div className="suggestions-header" onClick={() => setShowSuggestions(!showSuggestions)}>
-            <h3>Smart Suggestions</h3>
-            <button className="suggestions-toggle">
-              {showSuggestions ? "Hide" : "Show"}
-            </button>
-          </div>
-          {showSuggestions && (
-            <div>
-              {displayedSuggestions.map((s) => (
-                <div key={s.itemId} className="suggestion-item">
-                  <div className="suggestion-info">
-                    <div className="suggestion-name">{s.itemName}</div>
-                    <div className="suggestion-reason">{s.reason}</div>
-                  </div>
-                  <button
-                    className="suggestion-add-btn"
-                    onClick={() => handleAddSuggestion(s.itemId)}
-                  >
-                    +
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="list-items">
         {unchecked.map((item) => (
           <div key={item.id} className="list-item">
@@ -115,20 +76,11 @@ export default function ListPage() {
               onClick={() => toggleItem(item.id)}
             />
             <div className="list-item-content">
-              <div className="list-item-name">
-                {item.item?.displayName ?? item.item?.name ?? item.customName ?? "Item"}
-              </div>
+              <div className="list-item-name">{item.customName}</div>
               <div className="list-item-meta">
-                <span>
-                  {item.quantity > 1 ? `x${item.quantity}` : ""}
-                  {item.unit ? ` ${item.unit}` : ""}
-                </span>
-                {item.cheapestPrice && (
-                  <span className="list-item-price">
-                    ${item.cheapestPrice.price.toFixed(2)} at {item.cheapestPrice.storeName}
-                    {item.cheapestPrice.isOnSale && <span className="sale-badge">SALE</span>}
-                  </span>
-                )}
+                {item.brand && <span>{item.brand}</span>}
+                {item.category && <span>{item.category}</span>}
+                {item.addedVia === "barcode" && <span>Scanned</span>}
               </div>
             </div>
             <button className="list-item-delete" onClick={() => removeItem(item.id)}>
@@ -144,9 +96,7 @@ export default function ListPage() {
               onClick={() => toggleItem(item.id)}
             />
             <div className="list-item-content">
-              <div className="list-item-name">
-                {item.item?.displayName ?? item.item?.name ?? item.customName ?? "Item"}
-              </div>
+              <div className="list-item-name">{item.customName}</div>
             </div>
             <button className="list-item-delete" onClick={() => removeItem(item.id)}>
               &times;
@@ -159,7 +109,7 @@ export default function ListPage() {
         <div className="empty-state">
           <div className="empty-state-icon">&#x1F6D2;</div>
           <div className="empty-state-text">Your list is empty</div>
-          <div className="empty-state-hint">Add items above or scan to get started</div>
+          <div className="empty-state-hint">Add items above or scan barcodes to get started</div>
         </div>
       )}
     </div>

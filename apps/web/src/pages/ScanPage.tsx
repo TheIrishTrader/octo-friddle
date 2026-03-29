@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Html5Qrcode } from "html5-qrcode";
+import { useList } from "@/hooks/useList";
 
 type ScanMode = null | "barcode" | "photo" | "fridge" | "receipt";
 
@@ -8,11 +9,11 @@ interface BarcodeProduct {
   brand?: string;
   category?: string;
   imageUrl?: string;
+  barcode: string;
 }
 
-// Direct browser-based barcode lookup (no backend needed)
 async function lookupBarcode(code: string): Promise<BarcodeProduct | null> {
-  // Try UPCitemdb first (free, no key required for small volume)
+  // Try UPCitemdb first
   try {
     const res = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${code}`);
     if (res.ok) {
@@ -24,14 +25,15 @@ async function lookupBarcode(code: string): Promise<BarcodeProduct | null> {
           brand: item.brand,
           category: item.category,
           imageUrl: item.images?.[0],
+          barcode: code,
         };
       }
     }
   } catch {
-    // fall through to next API
+    // fall through
   }
 
-  // Fallback: Open Food Facts (free, no key required)
+  // Fallback: Open Food Facts
   try {
     const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`);
     if (res.ok) {
@@ -43,6 +45,7 @@ async function lookupBarcode(code: string): Promise<BarcodeProduct | null> {
           brand: p.brands,
           category: p.categories?.split(",")[0]?.trim(),
           imageUrl: p.image_front_small_url,
+          barcode: code,
         };
       }
     }
@@ -55,110 +58,131 @@ async function lookupBarcode(code: string): Promise<BarcodeProduct | null> {
 
 export default function ScanPage() {
   const [mode, setMode] = useState<ScanMode>(null);
-  const [status, setStatus] = useState<"idle" | "scanning" | "uploading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "scanning" | "looking_up" | "found" | "not_found" | "added" | "error">("idle");
   const [message, setMessage] = useState("");
   const [foundProduct, setFoundProduct] = useState<BarcodeProduct | null>(null);
-  const [lastScanned, setLastScanned] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
-  const scannerContainerRef = useRef<string>("barcode-scanner");
+  const { addItem } = useList();
 
   const stopScanner = useCallback(async () => {
     if (scannerRef.current) {
       try {
         const state = scannerRef.current.getState();
-        if (state === 2) { // SCANNING
+        if (state === 2) {
           await scannerRef.current.stop();
         }
       } catch {
-        // ignore stop errors
+        // ignore
       }
       scannerRef.current = null;
     }
   }, []);
 
-  const handleBarcodeScan = useCallback(
-    async (code: string) => {
-      if (code === lastScanned && status === "success") return;
-      setLastScanned(code);
-      setFoundProduct(null);
-      setStatus("uploading");
-      setMessage(`Found barcode: ${code} — Looking up...`);
-      try {
-        const product = await lookupBarcode(code);
-        if (product) {
-          setStatus("success");
-          setFoundProduct(product);
-          setMessage(`${product.name}${product.brand ? ` (${product.brand})` : ""}`);
-        } else {
-          setStatus("error");
-          setMessage(`Barcode ${code} not found in any database`);
-        }
-      } catch (err) {
-        setStatus("error");
-        setMessage(err instanceof Error ? err.message : "Lookup failed");
-      }
-      // Allow scanning another barcode after 3 seconds
-      setTimeout(() => setLastScanned(null), 3000);
-    },
-    [lastScanned, status],
-  );
+  const startScanner = useCallback(async () => {
+    // Clean up any existing scanner
+    await stopScanner();
+
+    setStatus("scanning");
+    setMessage("");
+    setFoundProduct(null);
+
+    await new Promise((r) => setTimeout(r, 150));
+
+    const el = document.getElementById("barcode-scanner");
+    if (!el) return;
+
+    const scanner = new Html5Qrcode("barcode-scanner");
+    scannerRef.current = scanner;
+
+    try {
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 280, height: 150 }, aspectRatio: 1.5 },
+        async (decodedText) => {
+          // Stop scanning immediately on detection
+          try {
+            await scanner.stop();
+          } catch {
+            // ignore
+          }
+          scannerRef.current = null;
+
+          setStatus("looking_up");
+          setMessage(`Barcode: ${decodedText}`);
+
+          const product = await lookupBarcode(decodedText);
+          if (product) {
+            setFoundProduct(product);
+            setStatus("found");
+          } else {
+            setFoundProduct({ name: decodedText, barcode: decodedText });
+            setStatus("not_found");
+            setMessage(`Barcode ${decodedText} not found in any product database`);
+          }
+        },
+        () => { /* no barcode in frame */ },
+      );
+    } catch (err) {
+      setStatus("error");
+      setMessage(
+        err instanceof Error && err.message.includes("Permission")
+          ? "Camera permission denied. Please allow camera access in your browser settings."
+          : "Could not start camera. Try the manual entry below.",
+      );
+    }
+  }, [stopScanner]);
 
   useEffect(() => {
-    if (mode !== "barcode") return;
+    if (mode === "barcode" && status === "idle") {
+      startScanner();
+    }
+    return () => { stopScanner(); };
+  }, [mode]); // startScanner/stopScanner are stable callbacks
 
-    let cancelled = false;
+  const handleAddToList = () => {
+    if (!foundProduct) return;
+    addItem({
+      customName: foundProduct.brand
+        ? `${foundProduct.name} (${foundProduct.brand})`
+        : foundProduct.name,
+      brand: foundProduct.brand,
+      category: foundProduct.category,
+      imageUrl: foundProduct.imageUrl,
+      barcode: foundProduct.barcode,
+      addedVia: "barcode",
+    });
+    setStatus("added");
+    setMessage(`${foundProduct.name} added to your list!`);
+  };
 
-    const startScanner = async () => {
-      await new Promise((r) => setTimeout(r, 100));
-      if (cancelled) return;
-
-      const scanner = new Html5Qrcode(scannerContainerRef.current);
-      scannerRef.current = scanner;
-
-      try {
-        await scanner.start(
-          { facingMode: "environment" },
-          {
-            fps: 10,
-            qrbox: { width: 280, height: 150 },
-            aspectRatio: 1.5,
-          },
-          (decodedText) => {
-            handleBarcodeScan(decodedText);
-          },
-          () => {
-            // no barcode in frame — ignore
-          },
-        );
-      } catch (err) {
-        if (!cancelled) {
-          setStatus("error");
-          setMessage(
-            err instanceof Error && err.message.includes("Permission")
-              ? "Camera permission denied. Please allow camera access."
-              : "Could not start camera. Try the manual entry below.",
-          );
-        }
-      }
-    };
-
+  const handleScanAnother = () => {
+    setFoundProduct(null);
+    setStatus("idle");
+    setMessage("");
     startScanner();
+  };
 
-    return () => {
-      cancelled = true;
-      stopScanner();
-    };
-  }, [mode, handleBarcodeScan, stopScanner]);
+  const handleManualLookup = async (code: string) => {
+    await stopScanner();
+    setStatus("looking_up");
+    setMessage(`Looking up ${code}...`);
+    const product = await lookupBarcode(code);
+    if (product) {
+      setFoundProduct(product);
+      setStatus("found");
+    } else {
+      setFoundProduct({ name: code, barcode: code });
+      setStatus("not_found");
+      setMessage(`Barcode ${code} not found in any product database`);
+    }
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    setStatus("uploading");
-    setMessage("Image scanning requires the API server. See Settings for setup info.");
-    setTimeout(() => setStatus("error"), 100);
-
+    setStatus("error");
+    setMessage("Photo/receipt scanning requires the API backend to be deployed. Barcode scanning works now!");
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -167,7 +191,6 @@ export default function ScanPage() {
     setMode(null);
     setStatus("idle");
     setMessage("");
-    setLastScanned(null);
     setFoundProduct(null);
   };
 
@@ -188,25 +211,142 @@ export default function ScanPage() {
 
         {mode === "barcode" ? (
           <div>
-            {/* Live camera scanner */}
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-              <div
-                id={scannerContainerRef.current}
-                style={{ width: "100%", minHeight: 280 }}
-              />
-            </div>
-            <p style={{ fontSize: 13, color: "var(--gray-400)", textAlign: "center", marginTop: 8 }}>
-              Point your camera at a barcode
-            </p>
+            {/* Camera view - only show when actively scanning */}
+            {(status === "idle" || status === "scanning") && (
+              <>
+                <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                  <div id="barcode-scanner" style={{ width: "100%", minHeight: 280 }} />
+                </div>
+                <p style={{ fontSize: 13, color: "var(--gray-400)", textAlign: "center", marginTop: 8 }}>
+                  Point your camera at a barcode
+                </p>
+              </>
+            )}
 
-            {/* Manual fallback */}
-            <div className="card" style={{ marginTop: 16 }}>
-              <label className="input-label">Or type barcode manually</label>
-              <ManualBarcodeInput
-                onSubmit={(code) => handleBarcodeScan(code)}
-                disabled={status === "uploading"}
-              />
-            </div>
+            {/* Looking up spinner */}
+            {status === "looking_up" && (
+              <div className="card" style={{ textAlign: "center", padding: 32 }}>
+                <div className="spinner" style={{ margin: "0 auto 12px" }} />
+                <div style={{ fontSize: 15, fontWeight: 500 }}>Looking up barcode...</div>
+                <div style={{ fontSize: 13, color: "var(--gray-400)", marginTop: 4 }}>{message}</div>
+              </div>
+            )}
+
+            {/* Product found - confirmation screen */}
+            {status === "found" && foundProduct && (
+              <div className="card" style={{ textAlign: "center", padding: 24 }}>
+                {foundProduct.imageUrl && (
+                  <img
+                    src={foundProduct.imageUrl}
+                    alt={foundProduct.name}
+                    style={{
+                      width: 96,
+                      height: 96,
+                      objectFit: "contain",
+                      borderRadius: 12,
+                      margin: "0 auto 12px",
+                      display: "block",
+                      background: "var(--gray-50)",
+                    }}
+                  />
+                )}
+                <div style={{ fontSize: 18, fontWeight: 600, color: "var(--gray-900)" }}>
+                  {foundProduct.name}
+                </div>
+                {foundProduct.brand && (
+                  <div style={{ fontSize: 14, color: "var(--gray-500)", marginTop: 4 }}>
+                    {foundProduct.brand}
+                  </div>
+                )}
+                {foundProduct.category && (
+                  <div style={{
+                    display: "inline-block",
+                    padding: "2px 10px",
+                    background: "var(--green-50)",
+                    color: "var(--green-700)",
+                    borderRadius: 12,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    marginTop: 8,
+                  }}>
+                    {foundProduct.category}
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 8 }}>
+                  Barcode: {foundProduct.barcode}
+                </div>
+
+                <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleAddToList}>
+                    Add to List
+                  </button>
+                  <button className="btn btn-secondary" style={{ flex: 1 }} onClick={handleScanAnother}>
+                    Scan Another
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Not found */}
+            {status === "not_found" && (
+              <div className="card" style={{ textAlign: "center", padding: 24 }}>
+                <div style={{ fontSize: 40, marginBottom: 8 }}>?</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: "var(--gray-700)" }}>
+                  Product Not Found
+                </div>
+                <div style={{ fontSize: 13, color: "var(--gray-500)", marginTop: 4 }}>
+                  {message}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ flex: 1 }}
+                    onClick={() => {
+                      if (foundProduct) {
+                        addItem({
+                          customName: `Unknown (${foundProduct.barcode})`,
+                          barcode: foundProduct.barcode,
+                          addedVia: "barcode",
+                        });
+                        setStatus("added");
+                        setMessage("Item added to your list!");
+                      }
+                    }}
+                  >
+                    Add Anyway
+                  </button>
+                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleScanAnother}>
+                    Scan Another
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Added confirmation */}
+            {status === "added" && (
+              <div className="card" style={{ textAlign: "center", padding: 24 }}>
+                <div style={{ fontSize: 40, marginBottom: 8, color: "var(--green-500)" }}>&#10003;</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: "var(--green-700)" }}>
+                  {message}
+                </div>
+                <button className="btn btn-primary btn-block" style={{ marginTop: 20 }} onClick={handleScanAnother}>
+                  Scan Another
+                </button>
+              </div>
+            )}
+
+            {/* Error */}
+            {status === "error" && (
+              <div className="status-error" style={{ marginTop: 12 }}>{message}</div>
+            )}
+
+            {/* Manual entry - always visible unless we have a result */}
+            {(["idle", "scanning", "error"].includes(status)) && (
+              <div className="card" style={{ marginTop: 16 }}>
+                <label className="input-label">Or type barcode manually</label>
+                <ManualBarcodeInput onSubmit={handleManualLookup} disabled={status === "looking_up"} />
+              </div>
+            )}
           </div>
         ) : (
           <div className="scan-input-area">
@@ -233,36 +373,10 @@ export default function ScanPage() {
                 />
               </label>
             </div>
-          </div>
-        )}
-
-        {status === "uploading" && (
-          <div className="status-uploading">
-            <div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} />
-            {message}
-          </div>
-        )}
-        {status === "success" && (
-          <div className="status-success">
-            {foundProduct?.imageUrl && (
-              <img
-                src={foundProduct.imageUrl}
-                alt=""
-                style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
-              />
+            {status === "error" && (
+              <div className="status-error" style={{ marginTop: 12 }}>{message}</div>
             )}
-            <div>
-              <div>{message}</div>
-              {foundProduct?.category && (
-                <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}>
-                  {foundProduct.category}
-                </div>
-              )}
-            </div>
           </div>
-        )}
-        {status === "error" && (
-          <div className="status-error">{message}</div>
         )}
       </div>
     );

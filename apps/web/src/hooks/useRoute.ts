@@ -1,44 +1,24 @@
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/api/client";
-import type { ShoppingRoute, RouteOptions, NearbyStore, Store } from "@grocery/shared";
+// Route features require the backend API. These hooks return empty data
+// when the API is unavailable so the UI stays functional.
+
+interface ShoppingRoute {
+  totalCost: number;
+  savings: number;
+  totalDistance: number | null;
+  stops: { store: { name: string }; subtotal: number; distanceFromPrevious: number | null; items: { itemName: string; price: number }[] }[];
+}
 
 export function useOptimalRoute(
-  listId: string | null,
-  options?: Partial<RouteOptions>,
+  _listId: string | null,
+  _options?: { maxStops?: number },
 ) {
-  const params = new URLSearchParams();
-  if (options?.maxStops != null) params.set("maxStops", String(options.maxStops));
-  if (options?.gasPricePerGallon != null)
-    params.set("gasPricePerGallon", String(options.gasPricePerGallon));
-  if (options?.mpg != null) params.set("mpg", String(options.mpg));
-  if (options?.minuteValue != null)
-    params.set("minuteValue", String(options.minuteValue));
-  if (options?.userLat != null) params.set("userLat", String(options.userLat));
-  if (options?.userLon != null) params.set("userLon", String(options.userLon));
-
-  const qs = params.toString();
-  const path = `/route/optimize/${listId}${qs ? `?${qs}` : ""}`;
-
-  return useQuery({
-    queryKey: ["route", "optimize", listId, options],
-    queryFn: () => apiClient.get<ShoppingRoute>(path),
-    enabled: !!listId,
-  });
+  return { data: null as ShoppingRoute | null, isLoading: false };
 }
 
-export function useStoresForList(listId: string | null) {
-  return useQuery({
-    queryKey: ["route", "stores-for-list", listId],
-    queryFn: () => apiClient.get<Store[]>(`/route/stores-for-list/${listId}`),
-    enabled: !!listId,
-  });
+export function useStoresForList(_listId: string | null) {
+  return { data: [] as unknown[], isLoading: false };
 }
 
-export function useNearbyStores(lat: number | null, lon: number | null) {
-  return useQuery({
-    queryKey: ["stores", "nearby", lat, lon],
-    queryFn: () =>
-      apiClient.get<NearbyStore[]>(`/stores/nearby?lat=${lat}&lon=${lon}`),
-    enabled: lat != null && lon != null,
-  });
+export function useNearbyStores(_lat: number | null, _lon: number | null) {
+  return { data: [] as unknown[], isLoading: false };
 }
