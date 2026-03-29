@@ -1,19 +1,67 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { apiClient } from "@/api/client";
-import { useList } from "@/hooks/useList";
 
 type ScanMode = null | "barcode" | "photo" | "fridge" | "receipt";
+
+interface BarcodeProduct {
+  name: string;
+  brand?: string;
+  category?: string;
+  imageUrl?: string;
+}
+
+// Direct browser-based barcode lookup (no backend needed)
+async function lookupBarcode(code: string): Promise<BarcodeProduct | null> {
+  // Try UPCitemdb first (free, no key required for small volume)
+  try {
+    const res = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${code}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.items?.length > 0) {
+        const item = data.items[0];
+        return {
+          name: item.title ?? item.description ?? "Unknown",
+          brand: item.brand,
+          category: item.category,
+          imageUrl: item.images?.[0],
+        };
+      }
+    }
+  } catch {
+    // fall through to next API
+  }
+
+  // Fallback: Open Food Facts (free, no key required)
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.status === 1 && data.product) {
+        const p = data.product;
+        return {
+          name: p.product_name ?? p.generic_name ?? "Unknown",
+          brand: p.brands,
+          category: p.categories?.split(",")[0]?.trim(),
+          imageUrl: p.image_front_small_url,
+        };
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
 
 export default function ScanPage() {
   const [mode, setMode] = useState<ScanMode>(null);
   const [status, setStatus] = useState<"idle" | "scanning" | "uploading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [foundProduct, setFoundProduct] = useState<BarcodeProduct | null>(null);
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerRef = useRef<string>("barcode-scanner");
-  const { activeList } = useList();
 
   const stopScanner = useCallback(async () => {
     if (scannerRef.current) {
@@ -33,16 +81,15 @@ export default function ScanPage() {
     async (code: string) => {
       if (code === lastScanned && status === "success") return;
       setLastScanned(code);
+      setFoundProduct(null);
       setStatus("uploading");
-      setMessage(`Found barcode: ${code} - Looking up...`);
+      setMessage(`Found barcode: ${code} — Looking up...`);
       try {
-        const result = await apiClient.post<{ found: boolean; item: { name?: string; displayName?: string } | null }>(
-          "/scan/barcode",
-          { barcode: code, listId: activeList?.id },
-        );
-        if (result.found && result.item) {
+        const product = await lookupBarcode(code);
+        if (product) {
           setStatus("success");
-          setMessage(`Found: ${result.item.displayName ?? result.item.name}`);
+          setFoundProduct(product);
+          setMessage(`${product.name}${product.brand ? ` (${product.brand})` : ""}`);
         } else {
           setStatus("error");
           setMessage(`Barcode ${code} not found in any database`);
@@ -54,7 +101,7 @@ export default function ScanPage() {
       // Allow scanning another barcode after 3 seconds
       setTimeout(() => setLastScanned(null), 3000);
     },
-    [activeList?.id, lastScanned, status],
+    [lastScanned, status],
   );
 
   useEffect(() => {
@@ -63,7 +110,6 @@ export default function ScanPage() {
     let cancelled = false;
 
     const startScanner = async () => {
-      // Small delay to ensure DOM element exists
       await new Promise((r) => setTimeout(r, 100));
       if (cancelled) return;
 
@@ -82,7 +128,7 @@ export default function ScanPage() {
             handleBarcodeScan(decodedText);
           },
           () => {
-            // scan error (no barcode found in frame) - ignore
+            // no barcode in frame — ignore
           },
         );
       } catch (err) {
@@ -109,35 +155,9 @@ export default function ScanPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append("file", file);
-    if (activeList?.id) formData.append("listId", activeList.id);
-
     setStatus("uploading");
-
-    const endpoint =
-      mode === "photo"
-        ? "/scan/photo"
-        : mode === "fridge"
-          ? "/scan/fridge"
-          : "/scan/receipt";
-
-    setMessage(
-      mode === "receipt" ? "Processing receipt..." : "Analyzing image...",
-    );
-
-    try {
-      await apiClient.upload(endpoint, formData);
-      setStatus("success");
-      setMessage(
-        mode === "receipt"
-          ? "Receipt processed! Items added."
-          : "Items detected and added!",
-      );
-    } catch (err) {
-      setStatus("error");
-      setMessage(err instanceof Error ? err.message : "Upload failed");
-    }
+    setMessage("Image scanning requires the API server. See Settings for setup info.");
+    setTimeout(() => setStatus("error"), 100);
 
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -148,6 +168,7 @@ export default function ScanPage() {
     setStatus("idle");
     setMessage("");
     setLastScanned(null);
+    setFoundProduct(null);
   };
 
   if (mode) {
@@ -222,7 +243,23 @@ export default function ScanPage() {
           </div>
         )}
         {status === "success" && (
-          <div className="status-success">{message}</div>
+          <div className="status-success">
+            {foundProduct?.imageUrl && (
+              <img
+                src={foundProduct.imageUrl}
+                alt=""
+                style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
+              />
+            )}
+            <div>
+              <div>{message}</div>
+              {foundProduct?.category && (
+                <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}>
+                  {foundProduct.category}
+                </div>
+              )}
+            </div>
+          </div>
         )}
         {status === "error" && (
           <div className="status-error">{message}</div>
