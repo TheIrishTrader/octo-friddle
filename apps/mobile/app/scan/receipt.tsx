@@ -8,7 +8,7 @@ import type { ParsedReceiptData } from "@grocery/shared";
 export default function ReceiptScanScreen() {
   const router = useRouter();
   const [image, setImage] = useState<string | null>(null);
-  const [receiptId, setReceiptId] = useState<string | null>(null);
+  const [_receiptId, setReceiptId] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("idle");
   const [parsedData, setParsedData] = useState<ParsedReceiptData | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
@@ -31,7 +31,7 @@ export default function ReceiptScanScreen() {
     setStatus("uploading");
     try {
       // In production: upload to Supabase Storage, get public URL
-      const response = await apiClient.post("/scan/receipt", { imageUrl: imageUri });
+      const response = await apiClient.post<{ receiptId: string }>("/scan/receipt", { imageUrl: imageUri });
       setReceiptId(response.receiptId);
       setStatus("processing");
       startPolling(response.receiptId);
@@ -44,7 +44,7 @@ export default function ReceiptScanScreen() {
   const startPolling = (id: string) => {
     pollRef.current = setInterval(async () => {
       try {
-        const receipt = await apiClient.get(`/scan/receipt/${id}`);
+        const receipt = await apiClient.get<{ status: string; parsedData: ParsedReceiptData | null }>(`/scan/receipt/${id}`);
         if (receipt.status === "parsed") {
           clearInterval(pollRef.current);
           setStatus("parsed");

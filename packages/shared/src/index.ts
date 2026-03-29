@@ -27,3 +27,13 @@ export {
   parsedReceiptDataSchema,
   type UploadReceiptSchema,
 } from "./validation/receipt.schema";
+export {
+  createBudgetSchema,
+  updateBudgetSchema,
+  type CreateBudgetSchema,
+  type UpdateBudgetSchema,
+} from "./validation/budget.schema";
+export {
+  updatePreferencesSchema,
+  type UpdatePreferencesSchema,
+} from "./validation/preferences.schema";

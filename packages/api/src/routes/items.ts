@@ -50,14 +50,27 @@ export async function itemRoutes(app: FastifyInstance) {
   // Create a new item
   app.post("/items", async (request) => {
     const body = createItemSchema.parse(request.body);
-    const [item] = await db.insert(items).values(body).returning();
+    const [item] = await db
+      .insert(items)
+      .values({
+        ...body,
+        quantityDefault: body.quantityDefault?.toString(),
+      })
+      .returning();
     return item;
   });
 
   // Update an item
   app.patch<{ Params: { id: string } }>("/items/:id", async (request) => {
     const body = updateItemSchema.parse(request.body);
-    const [item] = await db.update(items).set(body).where(eq(items.id, request.params.id)).returning();
+    const [item] = await db
+      .update(items)
+      .set({
+        ...body,
+        quantityDefault: body.quantityDefault?.toString(),
+      })
+      .where(eq(items.id, request.params.id))
+      .returning();
     return item;
   });
 }

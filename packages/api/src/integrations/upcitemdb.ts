@@ -20,13 +20,14 @@ export async function lookupUPC(barcode: string): Promise<UPCItemResult | null> 
       return null;
     }
 
-    const data = await response.json();
+     
+    const data = (await response.json()) as any;
 
     if (!data.items || data.items.length === 0) {
       return null;
     }
 
-    const item = data.items[0];
+    const item = data.items[0]!;
 
     return {
       name: (item.title ?? "").toLowerCase().trim(),

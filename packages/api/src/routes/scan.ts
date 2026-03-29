@@ -73,7 +73,7 @@ export async function scanRoutes(app: FastifyInstance) {
       })
       .returning();
 
-    return { ...result, scanId: scan.id };
+    return { ...result, scanId: scan!.id };
   });
 
   // Receipt scan: upload and parse receipt
@@ -83,7 +83,7 @@ export async function scanRoutes(app: FastifyInstance) {
       const { imageUrl, storeId } = request.body;
 
       // Create receipt record in pending state
-      const [receipt] = await db
+      const [created] = await db
         .insert(receipts)
         .values({
           imageUrl,
@@ -91,6 +91,8 @@ export async function scanRoutes(app: FastifyInstance) {
           status: "processing",
         })
         .returning();
+
+      const receipt = created!;
 
       // Process asynchronously (in production, this would be a BullMQ job)
       // For MVP, process inline with a timeout

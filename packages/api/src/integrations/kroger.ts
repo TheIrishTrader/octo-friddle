@@ -25,7 +25,8 @@ async function authenticate(): Promise<string> {
     throw new Error(`Kroger auth failed: ${response.status}`);
   }
 
-  const data = await response.json();
+   
+  const data = (await response.json()) as any;
   accessToken = data.access_token;
   tokenExpiresAt = Date.now() + data.expires_in * 1000 - 60_000; // refresh 1 min early
 
@@ -65,18 +66,20 @@ export async function searchProducts(
     return [];
   }
 
-  const data = await response.json();
+   
+  const data = (await response.json()) as any;
 
-  return (data.data ?? []).map((item: Record<string, unknown>) => ({
+   
+  return (data.data ?? []).map((item: any) => ({
     productId: item.productId,
     upc: item.upc,
     name: item.description,
     brand: item.brand,
-    price: (item as Record<string, Record<string, Record<string, number>>>).items?.[0]?.price?.regular ?? null,
-    promoPrice: (item as Record<string, Record<string, Record<string, number>>>).items?.[0]?.price?.promo ?? null,
-    imageUrl: (item as Record<string, Record<string, { url: string }[]>>).images?.[0]?.sizes?.find(
-      (s: { size: string }) => s.size === "medium",
-    )?.url ?? null,
+    price: item.items?.[0]?.price?.regular ?? null,
+    promoPrice: item.items?.[0]?.price?.promo ?? null,
+    imageUrl:
+       
+      item.images?.[0]?.sizes?.find((s: any) => s.size === "medium")?.url ?? null,
   }));
 }
 
@@ -101,10 +104,12 @@ export async function findNearbyStores(
 
   if (!response.ok) return [];
 
-  const data = await response.json();
-  return (data.data ?? []).map((store: Record<string, unknown>) => ({
+   
+  const data = (await response.json()) as any;
+   
+  return (data.data ?? []).map((store: any) => ({
     locationId: store.locationId,
     name: store.name,
-    address: `${(store as Record<string, Record<string, string>>).address?.addressLine1}, ${(store as Record<string, Record<string, string>>).address?.city}, ${(store as Record<string, Record<string, string>>).address?.state}`,
+    address: `${store.address?.addressLine1}, ${store.address?.city}, ${store.address?.state}`,
   }));
 }

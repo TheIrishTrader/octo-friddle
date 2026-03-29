@@ -38,7 +38,7 @@ export default function PhotoScanScreen() {
     setLoading(true);
     try {
       // In production: upload to Supabase Storage first, then send URL
-      const response = await apiClient.post("/scan/photo", { imageUrl: imageUri });
+      const response = await apiClient.post<{ items: Array<{ name: string; brand: string | null; category: string }> }>("/scan/photo", { imageUrl: imageUri });
       setResults(response.items ?? []);
     } catch {
       Alert.alert("Error", "Failed to analyze photo. Please try again.");

@@ -31,9 +31,11 @@ export async function searchWalmartProducts(query: string): Promise<WalmartProdu
     return [];
   }
 
-  const data = await response.json();
+   
+  const data = (await response.json()) as any;
 
-  return (data.items ?? []).map((item: Record<string, unknown>) => ({
+   
+  return (data.items ?? []).map((item: any) => ({
     itemId: String(item.itemId),
     name: item.name as string,
     brand: (item.brandName as string) ?? null,

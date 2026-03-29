@@ -23,7 +23,7 @@ export default function FridgeScanScreen() {
   const analyzeFridge = async (imageUri: string) => {
     setLoading(true);
     try {
-      const response = await apiClient.post("/scan/fridge", { imageUrl: imageUri });
+      const response = await apiClient.post<{ detectedItems: DetectedFridgeItem[]; missingItems: string[] }>("/scan/fridge", { imageUrl: imageUri });
       setDetected(response.detectedItems ?? []);
       setMissing(response.missingItems ?? []);
     } catch {

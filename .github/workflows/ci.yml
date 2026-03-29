@@ -24,6 +24,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Build shared
+        run: pnpm --filter @grocery/shared build
+
       - name: Typecheck shared
         run: pnpm --filter @grocery/shared typecheck
 

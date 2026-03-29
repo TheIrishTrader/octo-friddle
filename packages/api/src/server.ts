@@ -1,11 +1,15 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import sensible from "@fastify/sensible";
 import { env } from "./config/env";
 import { listRoutes } from "./routes/lists";
 import { itemRoutes } from "./routes/items";
 import { priceRoutes } from "./routes/prices";
 import { scanRoutes } from "./routes/scan";
+import { storeRoutes } from "./routes/stores";
+import { budgetRoutes } from "./routes/budget";
+import { preferencesRoutes } from "./routes/preferences";
 
 const app = Fastify({
   logger: {
@@ -14,6 +18,7 @@ const app = Fastify({
 });
 
 // Plugins
+await app.register(sensible);
 await app.register(cors, {
   origin: true, // Allow all origins for family app
 });
@@ -28,6 +33,9 @@ await app.register(listRoutes, { prefix: "/api" });
 await app.register(itemRoutes, { prefix: "/api" });
 await app.register(priceRoutes, { prefix: "/api" });
 await app.register(scanRoutes, { prefix: "/api" });
+await app.register(storeRoutes, { prefix: "/api" });
+await app.register(budgetRoutes, { prefix: "/api" });
+await app.register(preferencesRoutes, { prefix: "/api" });
 
 // Start server
 try {

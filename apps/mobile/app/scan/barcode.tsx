@@ -27,7 +27,7 @@ export default function BarcodeScanScreen() {
     setLoading(true);
 
     try {
-      const result = await apiClient.post("/scan/barcode", { barcode: data });
+      const result = await apiClient.post<{ found: boolean; item: { displayName?: string; name: string; brand?: string } }>("/scan/barcode", { barcode: data });
 
       if (result.found) {
         Alert.alert(

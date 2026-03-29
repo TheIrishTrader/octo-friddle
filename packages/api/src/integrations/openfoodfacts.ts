@@ -10,7 +10,8 @@ export async function lookupByBarcode(
 
     if (!response.ok) return null;
 
-    const data = await response.json();
+     
+    const data = (await response.json()) as any;
 
     if (data.status !== 1 || !data.product) return null;
 

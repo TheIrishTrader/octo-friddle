@@ -2,10 +2,14 @@ import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet } from "r
 import { useState } from "react";
 import { useRouter } from "expo-router";
 import { useList } from "@/hooks/useList";
+import { useRealtimeListSync } from "@/hooks/useRealtime";
 
 export default function ListScreen() {
   const router = useRouter();
   const { activeList, addItem, toggleItem, removeItem } = useList();
+
+  // Enable realtime sync across household devices
+  useRealtimeListSync(activeList?.id ?? null);
   const [newItemText, setNewItemText] = useState("");
 
   const handleAddItem = () => {
