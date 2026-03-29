@@ -30,3 +30,10 @@ export type {
   SpendingTrend,
   UserPreferences,
 } from "./budget";
+export type {
+  PurchasePattern,
+  SmartSuggestion,
+  Substitution,
+  SubstitutionOption,
+  PriceAlert,
+} from "./smart";

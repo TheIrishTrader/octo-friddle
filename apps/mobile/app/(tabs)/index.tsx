@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "expo-router";
 import { useList } from "@/hooks/useList";
 import { useRealtimeListSync } from "@/hooks/useRealtime";
+import { useSuggestions, useAddSuggestions } from "@/hooks/useSmart";
 
 export default function ListScreen() {
   const router = useRouter();
@@ -11,11 +12,32 @@ export default function ListScreen() {
   // Enable realtime sync across household devices
   useRealtimeListSync(activeList?.id ?? null);
   const [newItemText, setNewItemText] = useState("");
+  const [suggestionsExpanded, setSuggestionsExpanded] = useState(true);
+
+  // Smart suggestions
+  const { data: suggestions } = useSuggestions();
+  const addSuggestionsMutation = useAddSuggestions();
+
+  const visibleSuggestions = (suggestions ?? []).slice(0, 3);
+  const hasSuggestions = visibleSuggestions.length > 0;
 
   const handleAddItem = () => {
     if (!newItemText.trim()) return;
     addItem({ customName: newItemText.trim(), addedVia: "manual" });
     setNewItemText("");
+  };
+
+  const handleAddSuggestion = (itemId: string) => {
+    if (!activeList?.id) return;
+    addSuggestionsMutation.mutate({ listId: activeList.id, itemIds: [itemId] });
+  };
+
+  const handleAddAllSuggestions = () => {
+    if (!activeList?.id || !visibleSuggestions.length) return;
+    addSuggestionsMutation.mutate({
+      listId: activeList.id,
+      itemIds: visibleSuggestions.map((s) => s.itemId),
+    });
   };
 
   return (
@@ -56,6 +78,59 @@ export default function ListScreen() {
           <Text style={styles.quickActionText}>Fridge</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Smart Suggestions Banner */}
+      {hasSuggestions && (
+        <View style={styles.suggestionsCard}>
+          <TouchableOpacity
+            style={styles.suggestionsHeader}
+            onPress={() => setSuggestionsExpanded(!suggestionsExpanded)}
+          >
+            <Text style={styles.suggestionsTitle}>Smart Suggestions</Text>
+            <Text style={styles.suggestionsToggle}>
+              {suggestionsExpanded ? "Hide" : "Show"}
+            </Text>
+          </TouchableOpacity>
+
+          {suggestionsExpanded && (
+            <View>
+              {visibleSuggestions.map((suggestion) => (
+                <View key={suggestion.itemId} style={styles.suggestionRow}>
+                  <View style={styles.suggestionInfo}>
+                    <Text style={styles.suggestionName}>
+                      {suggestion.itemName}
+                    </Text>
+                    <Text style={styles.suggestionReason}>
+                      {suggestion.reason}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.suggestionAddButton}
+                    onPress={() => handleAddSuggestion(suggestion.itemId)}
+                    disabled={addSuggestionsMutation.isPending}
+                  >
+                    <Text style={styles.suggestionAddText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              {visibleSuggestions.length > 1 && (
+                <TouchableOpacity
+                  style={styles.addAllButton}
+                  onPress={handleAddAllSuggestions}
+                  disabled={addSuggestionsMutation.isPending}
+                >
+                  <Text style={styles.addAllText}>
+                    {addSuggestionsMutation.isPending
+                      ? "Adding..."
+                      : "Add All"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Item list */}
       <FlatList
@@ -142,6 +217,80 @@ const styles = StyleSheet.create({
     borderColor: "#a7f3d0",
   },
   quickActionText: { color: "#059669", fontSize: 13, fontWeight: "600" },
+
+  // Smart Suggestions
+  suggestionsCard: {
+    backgroundColor: "#fff",
+    marginHorizontal: 12,
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
+    overflow: "hidden",
+  },
+  suggestionsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: "#ecfdf5",
+  },
+  suggestionsTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#065f46",
+  },
+  suggestionsToggle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#059669",
+  },
+  suggestionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+    gap: 10,
+  },
+  suggestionInfo: { flex: 1 },
+  suggestionName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  suggestionReason: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: 2,
+  },
+  suggestionAddButton: {
+    width: 32,
+    height: 32,
+    backgroundColor: "#10B981",
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  suggestionAddText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  addAllButton: {
+    alignItems: "center",
+    paddingVertical: 10,
+    backgroundColor: "#ecfdf5",
+  },
+  addAllText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#059669",
+  },
+
+  // Existing list styles
   listItem: {
     flexDirection: "row",
     alignItems: "center",

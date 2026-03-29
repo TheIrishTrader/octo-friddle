@@ -10,6 +10,7 @@ import { scanRoutes } from "./routes/scan";
 import { storeRoutes } from "./routes/stores";
 import { budgetRoutes } from "./routes/budget";
 import { preferencesRoutes } from "./routes/preferences";
+import { smartRoutes } from "./routes/smart";
 
 const app = Fastify({
   logger: {
@@ -36,6 +37,7 @@ await app.register(scanRoutes, { prefix: "/api" });
 await app.register(storeRoutes, { prefix: "/api" });
 await app.register(budgetRoutes, { prefix: "/api" });
 await app.register(preferencesRoutes, { prefix: "/api" });
+await app.register(smartRoutes, { prefix: "/api" });
 
 // Start server
 try {
