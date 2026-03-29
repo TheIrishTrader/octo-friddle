@@ -21,6 +21,9 @@ export const env = cleanEnv(process.env, {
   // Walmart API
   WALMART_API_KEY: str({ default: "" }),
 
+  // SerpAPI (Google Shopping + Amazon search)
+  SERPAPI_KEY: str({ default: "" }),
+
   // Google Maps (optional, for route optimization)
   GOOGLE_MAPS_API_KEY: str({ default: "" }),
 

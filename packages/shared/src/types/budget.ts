@@ -37,6 +37,7 @@ export interface UserPreferences {
   dietaryFilters: string[];
   brandPreferences: Record<string, string>;
   preferredStores: string[];
+  zipCode: string | null;
   householdSize: number;
   createdAt: string;
   updatedAt: string;

@@ -17,6 +17,7 @@ export const userPreferences = pgTable("user_preferences", {
   dietaryFilters: text("dietary_filters").array(),
   brandPreferences: jsonb("brand_preferences"),
   preferredStores: uuid("preferred_stores").array(),
+  zipCode: text("zip_code"),
   householdSize: integer("household_size").notNull().default(2),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

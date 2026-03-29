@@ -33,6 +33,9 @@ export class PreferencesService {
           ...(data.householdSize !== undefined && {
             householdSize: data.householdSize,
           }),
+          ...(data.zipCode !== undefined && {
+            zipCode: data.zipCode,
+          }),
           updatedAt: new Date(),
         })
         .where(eq(userPreferences.id, existing.id))
@@ -47,6 +50,7 @@ export class PreferencesService {
         brandPreferences: data.brandPreferences ?? {},
         preferredStores: data.preferredStores ?? [],
         householdSize: data.householdSize ?? 2,
+        zipCode: data.zipCode ?? null,
       })
       .returning();
     return created;

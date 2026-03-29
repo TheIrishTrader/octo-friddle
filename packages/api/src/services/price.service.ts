@@ -5,11 +5,15 @@ import { items } from "../db/schema/items";
 import { stores } from "../db/schema/stores";
 import { searchProducts } from "../integrations/kroger";
 import { searchWalmartProducts } from "../integrations/walmart";
+import { searchGoogleShopping } from "../integrations/serpapi";
+import { searchAmazon } from "../integrations/amazon";
 import { StoreService } from "./store.service";
+import { PreferencesService } from "./preferences.service";
 import type { PriceComparison, BasketComparison, PriceTrend } from "@grocery/shared";
 
 const CACHE_HOURS = 6;
 const storeService = new StoreService();
+const preferencesService = new PreferencesService();
 
 // Default location IDs -- used when no specific store context is available
 const DEFAULT_KROGER_LOCATION = "01400376";
@@ -31,14 +35,26 @@ export class PriceService {
     const searchTerm = item.barcode ?? item.name;
     const inserted: Array<typeof prices.$inferSelect> = [];
 
-    // Fetch from both APIs concurrently; failures are caught individually
-    const [krogerResults, walmartResults] = await Promise.all([
+    // Get user's zip code for location-based searches
+    const prefs = await preferencesService.getPreferences();
+    const zipCode = prefs?.zipCode ?? undefined;
+
+    // Fetch from all APIs concurrently; failures are caught individually
+    const [krogerResults, walmartResults, shoppingResults, amazonResults] = await Promise.all([
       searchProducts(searchTerm, DEFAULT_KROGER_LOCATION).catch((err) => {
         console.warn("Kroger API error:", err);
         return [];
       }),
       searchWalmartProducts(searchTerm).catch((err) => {
         console.warn("Walmart API error:", err);
+        return [];
+      }),
+      searchGoogleShopping(searchTerm, zipCode).catch((err) => {
+        console.warn("Google Shopping API error:", err);
+        return [];
+      }),
+      searchAmazon(searchTerm).catch((err) => {
+        console.warn("Amazon API error:", err);
         return [];
       }),
     ]);
@@ -87,6 +103,62 @@ export class PriceService {
             salePrice: isOnSale ? best.salePrice!.toFixed(2) : null,
             isOnSale,
             source: "walmart_api",
+          })
+          .returning();
+
+        inserted.push(row!);
+      }
+    }
+
+    // Process Google Shopping results: group by source (store) and take cheapest per store
+    if (shoppingResults.length > 0) {
+      const cheapestBySource = new Map<string, (typeof shoppingResults)[number]>();
+      for (const result of shoppingResults) {
+        if (result.price <= 0) continue;
+        const existing = cheapestBySource.get(result.source);
+        if (!existing || result.price < existing.price) {
+          cheapestBySource.set(result.source, result);
+        }
+      }
+
+      for (const [source, result] of cheapestBySource) {
+        const chain = source.toLowerCase().replace(/[^a-z0-9]/g, "_");
+        const store = await storeService.findOrCreateStore(chain, source);
+
+        const [row] = await db
+          .insert(prices)
+          .values({
+            itemId,
+            storeId: store.id,
+            price: result.price.toFixed(2),
+            salePrice: null,
+            isOnSale: false,
+            source: "google_shopping",
+          })
+          .returning();
+
+        inserted.push(row!);
+      }
+    }
+
+    // Process Amazon results
+    if (amazonResults.length > 0) {
+      const best = amazonResults.find((r) => r.price != null);
+      if (best && best.price != null) {
+        const store = await storeService.findOrCreateStore("amazon", "Amazon");
+
+        const isOnSale =
+          best.listPrice != null && best.price < best.listPrice;
+
+        const [row] = await db
+          .insert(prices)
+          .values({
+            itemId,
+            storeId: store.id,
+            price: best.price.toFixed(2),
+            salePrice: isOnSale ? best.price.toFixed(2) : null,
+            isOnSale,
+            source: "amazon_api",
           })
           .returning();
 
