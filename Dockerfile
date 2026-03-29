@@ -2,8 +2,8 @@ FROM node:22-slim AS builder
 RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /app
 
-# Copy only the files needed for install (exclude mobile app)
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+# Copy workspace config + root tsconfig
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/api/package.json packages/api/
 
@@ -19,7 +19,6 @@ RUN pnpm --filter @grocery/shared build && pnpm --filter @grocery/api build
 
 # Production image
 FROM node:22-slim
-RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /app
 COPY --from=builder /app/packages/api/dist packages/api/dist
 COPY --from=builder /app/packages/api/package.json packages/api/
