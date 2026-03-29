@@ -9,6 +9,16 @@ import { VisionService } from "../services/vision.service";
 import { ReceiptService } from "../services/receipt.service";
 import { FridgeService } from "../services/fridge.service";
 
+async function fileToDataUrl(
+  request: import("fastify").FastifyRequest,
+): Promise<string> {
+  const data = await request.file();
+  if (!data) throw new Error("No file uploaded");
+  const buffer = await data.toBuffer();
+  const mime = data.mimetype;
+  return `data:${mime};base64,${buffer.toString("base64")}`;
+}
+
 export async function scanRoutes(app: FastifyInstance) {
   const barcodeService = new BarcodeService();
   const visionService = new VisionService();
@@ -51,23 +61,39 @@ export async function scanRoutes(app: FastifyInstance) {
     return { found: true, source: "upcitemdb", item: saved };
   });
 
-  // Photo scan: identify item from photo
-  app.post<{ Body: { imageUrl: string } }>("/scan/photo", async (request) => {
-    const { imageUrl } = request.body;
+  // Photo scan: identify item from photo (accepts file upload or JSON)
+  app.post("/scan/photo", async (request) => {
+    const contentType = request.headers["content-type"] ?? "";
+    let imageUrl: string;
+
+    if (contentType.includes("multipart")) {
+      imageUrl = await fileToDataUrl(request);
+    } else {
+      imageUrl = (request.body as { imageUrl: string }).imageUrl;
+    }
+
     const result = await visionService.identifyItem(imageUrl);
     return result;
   });
 
-  // Fridge scan: analyze fridge contents
-  app.post<{ Body: { imageUrl: string } }>("/scan/fridge", async (request) => {
-    const { imageUrl } = request.body;
+  // Fridge scan: analyze fridge contents (accepts file upload or JSON)
+  app.post("/scan/fridge", async (request) => {
+    const contentType = request.headers["content-type"] ?? "";
+    let imageUrl: string;
+
+    if (contentType.includes("multipart")) {
+      imageUrl = await fileToDataUrl(request);
+    } else {
+      imageUrl = (request.body as { imageUrl: string }).imageUrl;
+    }
+
     const result = await fridgeService.analyzeFridge(imageUrl);
 
     // Save scan record
     const [scan] = await db
       .insert(fridgeScans)
       .values({
-        imageUrl,
+        imageUrl: "uploaded-file",
         detectedItems: result.detectedItems,
         missingItems: result.missingItems,
       })
@@ -76,35 +102,37 @@ export async function scanRoutes(app: FastifyInstance) {
     return { ...result, scanId: scan!.id };
   });
 
-  // Receipt scan: upload and parse receipt
-  app.post<{ Body: { imageUrl: string; storeId?: string } }>(
-    "/scan/receipt",
-    async (request) => {
-      const { imageUrl, storeId } = request.body;
+  // Receipt scan: upload and parse receipt (accepts file upload or JSON)
+  app.post("/scan/receipt", async (request) => {
+    const contentType = request.headers["content-type"] ?? "";
+    let imageUrl: string;
 
-      // Create receipt record in pending state
-      const [created] = await db
-        .insert(receipts)
-        .values({
-          imageUrl,
-          storeId: storeId ?? null,
-          status: "processing",
-        })
-        .returning();
+    if (contentType.includes("multipart")) {
+      imageUrl = await fileToDataUrl(request);
+    } else {
+      imageUrl = (request.body as { imageUrl: string; storeId?: string })
+        .imageUrl;
+    }
 
-      const receipt = created!;
+    // Create receipt record in pending state
+    const [created] = await db
+      .insert(receipts)
+      .values({
+        imageUrl: "uploaded-file",
+        storeId: null,
+        status: "processing",
+      })
+      .returning();
 
-      // Process asynchronously (in production, this would be a BullMQ job)
-      // For MVP, process inline with a timeout
-      receiptService
-        .parseReceipt(imageUrl, receipt.id)
-        .catch((err) => {
-          console.error(`Failed to parse receipt ${receipt.id}:`, err);
-        });
+    const receipt = created!;
 
-      return { receiptId: receipt.id, status: "processing" };
-    },
-  );
+    // Process asynchronously
+    receiptService.parseReceipt(imageUrl, receipt.id).catch((err) => {
+      console.error(`Failed to parse receipt ${receipt.id}:`, err);
+    });
+
+    return { receiptId: receipt.id, status: "processing" };
+  });
 
   // Get receipt status/result
   app.get<{ Params: { id: string } }>("/scan/receipt/:id", async (request) => {

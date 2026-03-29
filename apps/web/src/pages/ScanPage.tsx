@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Html5Qrcode } from "html5-qrcode";
 import { apiClient } from "@/api/client";
 import { useList } from "@/hooks/useList";
 
@@ -6,29 +7,103 @@ type ScanMode = null | "barcode" | "photo" | "fridge" | "receipt";
 
 export default function ScanPage() {
   const [mode, setMode] = useState<ScanMode>(null);
-  const [barcode, setBarcode] = useState("");
-  const [status, setStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "scanning" | "uploading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [lastScanned, setLastScanned] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerContainerRef = useRef<string>("barcode-scanner");
   const { activeList } = useList();
 
-  const handleBarcodeLookup = async () => {
-    if (!barcode.trim()) return;
-    setStatus("uploading");
-    setMessage("Looking up barcode...");
-    try {
-      await apiClient.post("/scan/barcode", {
-        barcode: barcode.trim(),
-        listId: activeList?.id,
-      });
-      setStatus("success");
-      setMessage("Item added to your list!");
-      setBarcode("");
-    } catch (err) {
-      setStatus("error");
-      setMessage(err instanceof Error ? err.message : "Lookup failed");
+  const stopScanner = useCallback(async () => {
+    if (scannerRef.current) {
+      try {
+        const state = scannerRef.current.getState();
+        if (state === 2) { // SCANNING
+          await scannerRef.current.stop();
+        }
+      } catch {
+        // ignore stop errors
+      }
+      scannerRef.current = null;
     }
-  };
+  }, []);
+
+  const handleBarcodeScan = useCallback(
+    async (code: string) => {
+      if (code === lastScanned && status === "success") return;
+      setLastScanned(code);
+      setStatus("uploading");
+      setMessage(`Found barcode: ${code} - Looking up...`);
+      try {
+        const result = await apiClient.post<{ found: boolean; item: { name?: string; displayName?: string } | null }>(
+          "/scan/barcode",
+          { barcode: code, listId: activeList?.id },
+        );
+        if (result.found && result.item) {
+          setStatus("success");
+          setMessage(`Found: ${result.item.displayName ?? result.item.name}`);
+        } else {
+          setStatus("error");
+          setMessage(`Barcode ${code} not found in any database`);
+        }
+      } catch (err) {
+        setStatus("error");
+        setMessage(err instanceof Error ? err.message : "Lookup failed");
+      }
+      // Allow scanning another barcode after 3 seconds
+      setTimeout(() => setLastScanned(null), 3000);
+    },
+    [activeList?.id, lastScanned, status],
+  );
+
+  useEffect(() => {
+    if (mode !== "barcode") return;
+
+    let cancelled = false;
+
+    const startScanner = async () => {
+      // Small delay to ensure DOM element exists
+      await new Promise((r) => setTimeout(r, 100));
+      if (cancelled) return;
+
+      const scanner = new Html5Qrcode(scannerContainerRef.current);
+      scannerRef.current = scanner;
+
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: { width: 280, height: 150 },
+            aspectRatio: 1.5,
+          },
+          (decodedText) => {
+            handleBarcodeScan(decodedText);
+          },
+          () => {
+            // scan error (no barcode found in frame) - ignore
+          },
+        );
+      } catch (err) {
+        if (!cancelled) {
+          setStatus("error");
+          setMessage(
+            err instanceof Error && err.message.includes("Permission")
+              ? "Camera permission denied. Please allow camera access."
+              : "Could not start camera. Try the manual entry below.",
+          );
+        }
+      }
+    };
+
+    startScanner();
+
+    return () => {
+      cancelled = true;
+      stopScanner();
+    };
+  }, [mode, handleBarcodeScan, stopScanner]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -48,7 +123,7 @@ export default function ScanPage() {
           : "/scan/receipt";
 
     setMessage(
-      mode === "receipt" ? "Processing receipt..." : "Analyzing image..."
+      mode === "receipt" ? "Processing receipt..." : "Analyzing image...",
     );
 
     try {
@@ -57,7 +132,7 @@ export default function ScanPage() {
       setMessage(
         mode === "receipt"
           ? "Receipt processed! Items added."
-          : "Items detected and added!"
+          : "Items detected and added!",
       );
     } catch (err) {
       setStatus("error");
@@ -67,15 +142,23 @@ export default function ScanPage() {
     if (fileRef.current) fileRef.current.value = "";
   };
 
+  const handleBack = async () => {
+    await stopScanner();
+    setMode(null);
+    setStatus("idle");
+    setMessage("");
+    setLastScanned(null);
+  };
+
   if (mode) {
     return (
       <div>
         <div className="page-header">
-          <button className="btn btn-secondary btn-sm" onClick={() => { setMode(null); setStatus("idle"); }}>
+          <button className="btn btn-secondary btn-sm" onClick={handleBack}>
             &larr; Back
           </button>
           <h1 className="page-title" style={{ marginTop: 8 }}>
-            {mode === "barcode" && "Barcode Lookup"}
+            {mode === "barcode" && "Barcode Scanner"}
             {mode === "photo" && "Photo Scan"}
             {mode === "fridge" && "Fridge Scan"}
             {mode === "receipt" && "Receipt Scan"}
@@ -83,25 +166,25 @@ export default function ScanPage() {
         </div>
 
         {mode === "barcode" ? (
-          <div className="card">
-            <label className="input-label">Enter barcode number</label>
-            <div className="input-group">
-              <input
-                className="input"
-                type="text"
-                placeholder="e.g. 012345678901"
-                value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleBarcodeLookup()}
-                inputMode="numeric"
+          <div>
+            {/* Live camera scanner */}
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <div
+                id={scannerContainerRef.current}
+                style={{ width: "100%", minHeight: 280 }}
               />
-              <button
-                className="btn btn-primary"
-                onClick={handleBarcodeLookup}
-                disabled={!barcode.trim() || status === "uploading"}
-              >
-                Lookup
-              </button>
+            </div>
+            <p style={{ fontSize: 13, color: "var(--gray-400)", textAlign: "center", marginTop: 8 }}>
+              Point your camera at a barcode
+            </p>
+
+            {/* Manual fallback */}
+            <div className="card" style={{ marginTop: 16 }}>
+              <label className="input-label">Or type barcode manually</label>
+              <ManualBarcodeInput
+                onSubmit={(code) => handleBarcodeScan(code)}
+                disabled={status === "uploading"}
+              />
             </div>
           </div>
         ) : (
@@ -112,12 +195,12 @@ export default function ScanPage() {
                   <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" />
                 </svg>
                 <span>
-                  {mode === "photo" && "Upload a photo of items"}
-                  {mode === "fridge" && "Upload a photo of your fridge"}
-                  {mode === "receipt" && "Upload a receipt photo"}
+                  {mode === "photo" && "Take or upload a photo of items"}
+                  {mode === "fridge" && "Take or upload a photo of your fridge"}
+                  {mode === "receipt" && "Take or upload a receipt photo"}
                 </span>
                 <span style={{ fontSize: 12, color: "var(--gray-400)" }}>
-                  Tap to select a file
+                  Tap to open camera or select file
                 </span>
                 <input
                   ref={fileRef}
@@ -163,7 +246,7 @@ export default function ScanPage() {
             </svg>
           </div>
           <div className="scan-card-title">Barcode</div>
-          <div className="scan-card-desc">Type or paste a barcode number</div>
+          <div className="scan-card-desc">Auto-scan with camera</div>
         </div>
 
         <div className="scan-card" onClick={() => setMode("photo")}>
@@ -196,6 +279,47 @@ export default function ScanPage() {
           <div className="scan-card-desc">Upload a store receipt</div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ManualBarcodeInput({
+  onSubmit,
+  disabled,
+}: {
+  onSubmit: (code: string) => void;
+  disabled: boolean;
+}) {
+  const [value, setValue] = useState("");
+
+  return (
+    <div className="input-group">
+      <input
+        className="input"
+        type="text"
+        placeholder="e.g. 012345678901"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && value.trim()) {
+            onSubmit(value.trim());
+            setValue("");
+          }
+        }}
+        inputMode="numeric"
+      />
+      <button
+        className="btn btn-primary"
+        onClick={() => {
+          if (value.trim()) {
+            onSubmit(value.trim());
+            setValue("");
+          }
+        }}
+        disabled={!value.trim() || disabled}
+      >
+        Lookup
+      </button>
     </div>
   );
 }

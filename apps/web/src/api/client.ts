@@ -39,10 +39,19 @@ export const apiClient = {
       method: "DELETE",
     }),
 
-  upload: <T>(path: string, formData: FormData) =>
-    request<T>(path, {
+  upload: async <T>(path: string, formData: FormData): Promise<T> => {
+    const url = `${API_BASE_URL}${path}`;
+    const response = await fetch(url, {
       method: "POST",
-      headers: {},
-      body: formData as unknown as string,
-    }),
+      body: formData,
+      // No Content-Type header — browser sets multipart boundary automatically
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(error.message ?? `Upload failed: ${response.status}`);
+    }
+
+    return response.json();
+  },
 };

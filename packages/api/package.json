@@ -15,6 +15,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@fastify/cors": "^10.0.0",
+    "@fastify/multipart": "^9.4.0",
     "@fastify/sensible": "^6.0.4",
     "@grocery/shared": "workspace:*",
     "bullmq": "^5.0.0",

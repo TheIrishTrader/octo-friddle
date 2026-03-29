@@ -1,6 +1,7 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import sensible from "@fastify/sensible";
 import { env } from "./config/env";
 import { listRoutes } from "./routes/lists";
@@ -21,6 +22,9 @@ const app = Fastify({
 
 // Plugins
 await app.register(sensible);
+await app.register(multipart, {
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+});
 await app.register(cors, {
   origin: true, // Allow all origins for family app
 });
