@@ -23,6 +23,22 @@ export default function RootLayout() {
         <Stack.Screen name="scan/receipt" options={{ title: "Scan Receipt" }} />
         <Stack.Screen name="item/[id]" options={{ title: "Item Details" }} />
         <Stack.Screen name="trip/plan" options={{ title: "Trip Planner" }} />
+        <Stack.Screen
+          name="route"
+          options={{
+            title: "Shopping Route",
+            headerStyle: { backgroundColor: "#10B981" },
+            headerTintColor: "#fff",
+          }}
+        />
+        <Stack.Screen
+          name="stores"
+          options={{
+            title: "Nearby Stores",
+            headerStyle: { backgroundColor: "#10B981" },
+            headerTintColor: "#fff",
+          }}
+        />
       </Stack>
     </QueryClientProvider>
   );

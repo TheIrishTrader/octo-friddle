@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { useState, useCallback, useMemo } from "react";
+import { useRouter } from "expo-router";
 import { useList } from "@/hooks/useList";
 import { useBasketComparison, useRefreshPrices } from "@/hooks/usePrices";
 import { useAlerts, useDeals, useSubstitutions } from "@/hooks/useSmart";
@@ -45,6 +46,7 @@ function getAlertBgColor(alertType: PriceAlert["alertType"]): string {
 }
 
 export default function PricesScreen() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { activeList } = useList();
   const [showBasket, setShowBasket] = useState(false);
@@ -243,6 +245,14 @@ export default function PricesScreen() {
         </View>
       )}
 
+      {/* Plan Shopping Route button */}
+      <TouchableOpacity
+        style={styles.routeButton}
+        onPress={() => router.push("/route")}
+      >
+        <Text style={styles.routeButtonText}>Plan Shopping Route</Text>
+      </TouchableOpacity>
+
       {/* Item list with pull-to-refresh */}
       <FlatList
         data={activeList?.items ?? []}
@@ -413,6 +423,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#065f46",
     marginTop: 6,
+  },
+
+  // Route button
+  routeButton: {
+    backgroundColor: "#065f46",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  routeButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
   },
 
   // Price cards
