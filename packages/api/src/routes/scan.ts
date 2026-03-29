@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
 import { db } from "../db/index";
 import { items } from "../db/schema/items";
@@ -9,9 +9,7 @@ import { VisionService } from "../services/vision.service";
 import { ReceiptService } from "../services/receipt.service";
 import { FridgeService } from "../services/fridge.service";
 
-async function fileToDataUrl(
-  request: import("fastify").FastifyRequest,
-): Promise<string> {
+async function fileToDataUrl(request: FastifyRequest): Promise<string> {
   const data = await request.file();
   if (!data) throw new Error("No file uploaded");
   const buffer = await data.toBuffer();
