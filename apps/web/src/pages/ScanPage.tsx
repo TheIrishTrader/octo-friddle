@@ -211,17 +211,15 @@ export default function ScanPage() {
 
         {mode === "barcode" ? (
           <div>
-            {/* Camera view - only show when actively scanning */}
-            {(status === "idle" || status === "scanning") && (
-              <>
-                <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-                  <div id="barcode-scanner" style={{ width: "100%", minHeight: 280 }} />
-                </div>
-                <p style={{ fontSize: 13, color: "var(--gray-400)", textAlign: "center", marginTop: 8 }}>
-                  Point your camera at a barcode
-                </p>
-              </>
-            )}
+            {/* Camera view - always mounted, hidden when showing results */}
+            <div style={{ display: (status === "idle" || status === "scanning") ? "block" : "none" }}>
+              <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                <div id="barcode-scanner" style={{ width: "100%", minHeight: 280 }} />
+              </div>
+              <p style={{ fontSize: 13, color: "var(--gray-400)", textAlign: "center", marginTop: 8 }}>
+                Point your camera at a barcode
+              </p>
+            </div>
 
             {/* Looking up spinner */}
             {status === "looking_up" && (
