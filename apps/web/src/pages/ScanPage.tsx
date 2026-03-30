@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { useList } from "@/hooks/useList";
+import { apiClient } from "@/api/client";
 
 type ScanMode = null | "barcode" | "photo" | "fridge" | "receipt";
 
@@ -215,8 +216,79 @@ export default function ScanPage() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setStatus("error");
-    setMessage("Photo/receipt scanning requires the API backend. Barcode scanning works now!");
+
+    setStatus("looking_up");
+    setMessage(`Analyzing ${mode === "receipt" ? "receipt" : mode === "fridge" ? "fridge contents" : "photo"}...`);
+
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const endpoint = mode === "receipt" ? "/scan/receipt"
+        : mode === "fridge" ? "/scan/fridge"
+        : "/scan/photo";
+
+      if (mode === "fridge") {
+        const result = await apiClient.upload<{
+          detectedItems: Array<{ name: string; brand?: string | null; category?: string; quantity?: string }>;
+          missingItems: string[];
+        }>(endpoint, formData);
+
+        const detected = result.detectedItems ?? [];
+        const missing = result.missingItems ?? [];
+
+        // Add missing items to shopping list
+        for (const name of missing) {
+          addItem({ customName: name, addedVia: "fridge" });
+        }
+        // Optionally also add low-quantity items
+        for (const item of detected.filter((i) => i.quantity === "low" || i.quantity === "nearly_empty")) {
+          addItem({
+            customName: item.brand ? `${item.name} (${item.brand})` : item.name,
+            brand: item.brand ?? undefined,
+            category: item.category,
+            addedVia: "fridge",
+          });
+        }
+
+        const addedCount = missing.length + detected.filter((i) => i.quantity === "low" || i.quantity === "nearly_empty").length;
+        setStatus("added");
+        setMessage(
+          addedCount > 0
+            ? `Found ${detected.length} items in fridge. Added ${addedCount} item${addedCount > 1 ? "s" : ""} to restock.`
+            : `Found ${detected.length} items in fridge. Everything looks stocked!`,
+        );
+      } else if (mode === "receipt") {
+        const result = await apiClient.upload<{ receiptId: string; status: string }>(endpoint, formData);
+        setStatus("added");
+        setMessage(`Receipt uploaded (ID: ${result.receiptId}). Processing...`);
+      } else {
+        // photo mode
+        const result = await apiClient.upload<{
+          items: Array<{ name: string; brand?: string | null; category?: string; confidence?: number }>;
+        }>(endpoint, formData);
+
+        if (result.items && result.items.length > 0) {
+          for (const item of result.items) {
+            addItem({
+              customName: item.brand ? `${item.name} (${item.brand})` : item.name,
+              brand: item.brand ?? undefined,
+              category: item.category,
+              addedVia: "photo",
+            });
+          }
+          setStatus("added");
+          setMessage(`Added ${result.items.length} item${result.items.length > 1 ? "s" : ""} to your list!`);
+        } else {
+          setStatus("error");
+          setMessage("No items detected. Try a clearer photo.");
+        }
+      }
+    } catch (err) {
+      setStatus("error");
+      setMessage(err instanceof Error ? err.message : "Upload failed. Check your connection.");
+    }
+
     if (fileRef.current) fileRef.current.value = "";
   };
 

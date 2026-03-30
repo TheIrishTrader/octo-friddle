@@ -24,6 +24,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @grocery/shared build
       - run: pnpm --filter @grocery/web build
+        env:
+          VITE_API_URL: https://octo-friddle-production.up.railway.app/api
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

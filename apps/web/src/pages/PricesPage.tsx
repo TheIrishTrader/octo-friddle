@@ -7,11 +7,9 @@ export default function PricesPage() {
   const { activeList } = useList();
   const [tab, setTab] = useState<"basket" | "deals" | "alerts" | "subs">("basket");
 
-  const itemIds = (activeList?.items ?? [])
-    .filter((i: { id: string }) => i.id)
-    .map((i: { id: string }) => i.id);
+  const items = activeList?.items ?? [];
 
-  const { data: basket, isLoading: basketLoading } = useBasketComparison(itemIds);
+  const { data: basket, isLoading: basketLoading } = useBasketComparison(items);
   const { data: alerts } = useAlerts(activeList?.id ?? null);
   const { data: substitutions } = useSubstitutions(activeList?.id ?? null);
   const { data: deals } = useDeals();
@@ -43,7 +41,7 @@ export default function PricesPage() {
         <>
           {basketLoading ? (
             <div className="loading"><div className="spinner" /></div>
-          ) : itemIds.length === 0 ? (
+          ) : items.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-text">Add items to your list to compare prices</div>
             </div>
